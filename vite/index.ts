@@ -14,6 +14,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { buildRecoveryHtml, type RecoveryHtmlOptions } from "../src/recovery";
 
 export interface PwaKitVitePluginOptions {
   /**
@@ -32,6 +33,15 @@ export interface PwaKitVitePluginOptions {
   buildId?: string;
   /** Log prefix. Default: "pwakit". */
   logLabel?: string;
+  /**
+   * When set, generates `sw-recovery.html` at the given path (relative to
+   * project root) during the build and dev server start. Accepts all options
+   * from `buildRecoveryHtml()` — pass `bodyHtml` to supply your own UI.
+   */
+  recoveryHtml?: RecoveryHtmlOptions & {
+    /** Output path relative to project root. Default: "public/sw-recovery.html". */
+    path?: string;
+  };
 }
 
 export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
@@ -136,7 +146,22 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
     },
   };
 
-  return [define, emitVersion, injectSw];
+  const emitRecovery: Plugin | null = opts.recoveryHtml != null ? {
+    name: "pwakit:emit-recovery-html",
+    configResolved() {
+      const { path: filePath = "public/sw-recovery.html", ...htmlOpts } = opts.recoveryHtml!;
+      const out = path.resolve(resolvedRoot, filePath);
+      try {
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+        fs.writeFileSync(out, buildRecoveryHtml(htmlOpts), "utf8");
+        console.log(`[${logLabel}] generated ${filePath}`);
+      } catch (err) {
+        console.warn(`[${logLabel}] failed to write ${filePath}`, err);
+      }
+    },
+  } : null;
+
+  return [define, emitVersion, injectSw, ...(emitRecovery ? [emitRecovery] : [])];
 }
 
 export default pwaKit;
