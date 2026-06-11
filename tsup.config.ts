@@ -17,4 +17,5 @@ export default defineConfig({
   outExtension({ format }) {
     return { js: format === "esm" ? ".mjs" : ".cjs" };
   },
+  onSuccess: "node scripts/gen-recovery.mjs",
 });

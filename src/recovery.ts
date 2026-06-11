@@ -15,14 +15,19 @@
  */
 
 export interface RecoveryHtmlOptions {
-  /** Display name in the heading. Default: "the app". */
-  appName?: string;
-  /** Background color. Default: "#0b0b0b". */
-  background?: string;
-  /** Text color. Default: "#fafafa". */
-  foreground?: string;
-  /** Progress-bar accent color. Default: "#3b82f6". */
-  accent?: string;
+  /**
+   * Custom HTML to render in the `<body>` during recovery. When provided the
+   * kit emits no styles or markup of its own — only the required `<head>`
+   * cache-busting tags and the recovery script are added.
+   *
+   * Example:
+   * ```html
+   * <div style="display:grid;place-items:center;height:100vh">
+   *   <p>Updating…</p>
+   * </div>
+   * ```
+   */
+  bodyHtml?: string;
   /** Storage prefix the kit uses. Default: "pwakit:". */
   storagePrefix?: string;
   /** Path of THIS recovery document. Default: "/sw-recovery.html". */
@@ -32,10 +37,6 @@ export interface RecoveryHtmlOptions {
 }
 
 export function buildRecoveryHtml(opts: RecoveryHtmlOptions = {}): string {
-  const appName = opts.appName ?? "the app";
-  const background = opts.background ?? "#0b0b0b";
-  const foreground = opts.foreground ?? "#fafafa";
-  const accent = opts.accent ?? "#3b82f6";
   const storagePrefix = opts.storagePrefix ?? "pwakit:";
   const selfPath = opts.selfPath ?? "/sw-recovery.html";
   const hardRefreshParam = opts.hardRefreshParam ?? "pwakit_update";
@@ -49,24 +50,9 @@ export function buildRecoveryHtml(opts: RecoveryHtmlOptions = {}): string {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <meta name="robots" content="noindex" />
-    <title>Updating ${escapeHtml(appName)}</title>
-    <style>
-      :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: ${background}; color: ${foreground}; }
-      main { width: min(28rem, calc(100vw - 2rem)); text-align: center; }
-      h1 { margin: 0 0 .75rem; font-size: clamp(1.75rem, 6vw, 2.75rem); line-height: 1; }
-      p { margin: 0; opacity: .72; }
-      .bar { height: .35rem; margin-top: 1.5rem; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.12); }
-      .bar::before { content: ""; display: block; width: 45%; height: 100%; border-radius: inherit; background: ${accent}; animation: load 1.1s ease-in-out infinite alternate; }
-      @keyframes load { from { transform: translateX(0); } to { transform: translateX(125%); } }
-    </style>
   </head>
   <body>
-    <main aria-live="polite">
-      <h1>Updating ${escapeHtml(appName)}</h1>
-      <p>Clearing the old version and loading the latest one.</p>
-      <div class="bar" aria-hidden="true"></div>
-    </main>
+    ${opts.bodyHtml ?? ""}
     <script>
       ${recoveryScript({ storagePrefix, selfPath, hardRefreshParam })}
     </script>
