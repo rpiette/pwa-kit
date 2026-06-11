@@ -136,7 +136,10 @@ function recoveryScript(opts: { storagePrefix: string; selfPath: string; hardRef
       sessionStorage.removeItem(STORAGE_PREFIX + "hard-refresh-attempted");
       sessionStorage.removeItem(STORAGE_PREFIX + "update-reload-guard");
       sessionStorage.removeItem(STORAGE_PREFIX + "nuke-attempt");
-      sessionStorage.removeItem(STORAGE_PREFIX + "sw-recovery-attempted");
+      // Do NOT clear sw-recovery-attempted — it prevents an infinite loop when
+      // the new bundle isn't immediately available (CDN propagation lag). The
+      // guard is keyed by build ID, so a future recovery for a different build
+      // won't be blocked.
     } catch (_) {}
   }
   unregisterAll().then(purgeCaches).then(clearGuards).then(goNext, goNext);
