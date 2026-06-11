@@ -11,6 +11,7 @@ export default defineConfig({
   sourcemap: true,
   target: "es2020",
   splitting: false,
+  shims: true,
   // Emit ESM as .mjs and CJS as .cjs so the file extensions match
   // package.json `exports` and Node correctly identifies module format
   // regardless of any consumer's `"type"` field.

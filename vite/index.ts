@@ -13,8 +13,16 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 import { buildRecoveryHtml, type RecoveryHtmlOptions } from "../src/recovery";
+
+// Resolves the `sw/sw-push.js` template bundled with this package.
+// Works in both ESM (import.meta.url) and CJS (__filename via tsup transform).
+const SW_TEMPLATE_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../sw/sw-push.js",
+);
 
 export interface PwaKitVitePluginOptions {
   /**
@@ -98,51 +106,29 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
     },
   };
 
-  const injectSwBuildId = (original: string): string => {
-    const assignmentRe = /(self\.__PWAKIT_SW_BUILD_ID__\s*=\s*)(["'])([^"']*)(\2)(\s*;)/g;
-    let replacedAssignment = false;
-    const withAssignment = original.replace(
-      assignmentRe,
-      (_match, prefix: string, _quote: string, _value: string, _closingQuote: string, suffix: string) => {
-        replacedAssignment = true;
-        return `${prefix}${JSON.stringify(BUILD_ID)}${suffix}`;
-      },
-    );
-    if (replacedAssignment) return withAssignment;
-
-    const PLACEHOLDER = "__SW_BUILD_ID_PLACEHOLDER__";
-    return original.includes(PLACEHOLDER)
-      ? original.replace(new RegExp(PLACEHOLDER, "g"), BUILD_ID)
-      : original;
+  const writeSw = (dest: string) => {
+    try {
+      const template = fs.readFileSync(SW_TEMPLATE_PATH, "utf8");
+      const injected = template.replace(/__SW_BUILD_ID_PLACEHOLDER__/g, BUILD_ID);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, injected, "utf8");
+      console.log(`[${logLabel}] generated ${path.relative(resolvedRoot, dest)} (build id ${BUILD_ID})`);
+    } catch (err) {
+      throw new Error(`[${logLabel}] failed to write ${dest}: ${String(err)}`);
+    }
   };
 
   const injectSw: Plugin = {
     name: "pwakit:inject-sw-build-id",
+    configResolved() {
+      // Write to public/ so the dev server serves the correct file.
+      writeSw(path.resolve(resolvedRoot, swHelperPath));
+    },
     apply: "build",
     enforce: "post",
     closeBundle() {
-      // Try both the source location (in case vite-plugin-pwa copied it
-      // verbatim) and the output location.
-      const candidates = [
-        path.resolve(resolvedRoot, swHelperPath),
-        path.join(resolvedOutDir, path.basename(swHelperPath)),
-      ];
-      for (const target of candidates) {
-        try {
-          if (!fs.existsSync(target)) continue;
-          const original = fs.readFileSync(target, "utf8");
-          const replaced = injectSwBuildId(original);
-          if (replaced === original) continue;
-          if (/self\.\d/.test(replaced)) {
-            throw new Error(`[${logLabel}] sw helper post-injection sanity check failed: \`self.<digits>\` access detected. Placeholder over-replaced in ${target}.`);
-          }
-          fs.writeFileSync(target, replaced);
-          console.log(`[${logLabel}] injected build id ${BUILD_ID} into ${path.relative(resolvedRoot, target)}`);
-        } catch (err) {
-          if (err instanceof Error) throw err;
-          throw new Error(`[${logLabel}] failed to inject build id: ${String(err)}`);
-        }
-      }
+      // Also write to the build output directory.
+      writeSw(path.join(resolvedOutDir, path.basename(swHelperPath)));
     },
   };
 

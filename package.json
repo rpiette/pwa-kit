@@ -1,6 +1,6 @@
 {
   "name": "@rpiette/pwa-kit",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Framework-agnostic, headless PWA management toolkit: install prompt, service-worker status, update nag/snooze, hard reset, and auto-update orchestrator.",
   "license": "MIT",
   "author": "Richard Piette",
