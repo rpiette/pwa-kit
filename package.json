@@ -1,0 +1,56 @@
+{
+  "name": "@rpiette/pwa-kit",
+  "version": "0.1.8",
+  "description": "Framework-agnostic, headless PWA management toolkit: install prompt, service-worker status, update nag/snooze, hard reset, and auto-update orchestrator.",
+  "license": "MIT",
+  "author": "Richard Piette",
+  "type": "module",
+  "files": [
+    "dist",
+    "sw",
+    "assets",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.mjs",
+      "require": "./dist/vite.cjs"
+    },
+    "./sw-push": "./sw/sw-push.js",
+    "./recovery.html": "./assets/sw-recovery.html",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "vite": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "vite": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": ["pwa", "service-worker", "auto-update", "install-prompt", "headless", "framework-agnostic"]
+}
