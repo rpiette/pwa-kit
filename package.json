@@ -1,6 +1,6 @@
 {
   "name": "@rpiette/pwa-kit",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Framework-agnostic, headless PWA management toolkit: install prompt, service-worker status, update nag/snooze, hard reset, and auto-update orchestrator.",
   "license": "MIT",
   "author": "Richard Piette",
@@ -42,16 +42,25 @@
     "vite": ">=4"
   },
   "peerDependenciesMeta": {
-    "vite": { "optional": true }
+    "vite": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
-    "vite": "^5.0.0"
+    "vite": "^8.0.16"
   },
   "publishConfig": {
     "access": "public"
   },
-  "keywords": ["pwa", "service-worker", "auto-update", "install-prompt", "headless", "framework-agnostic"]
+  "keywords": [
+    "pwa",
+    "service-worker",
+    "auto-update",
+    "install-prompt",
+    "headless",
+    "framework-agnostic"
+  ]
 }
