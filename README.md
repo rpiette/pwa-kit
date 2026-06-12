@@ -87,7 +87,7 @@ Then copy the recovery page (one-time):
 cp node_modules/@rpiette/pwa-kit/assets/sw-recovery.html public/
 ```
 
-Or generate a branded copy at build time:
+Or generate a copy at build time with custom body HTML:
 
 ```ts
 import { buildRecoveryHtml } from "@rpiette/pwa-kit";
@@ -96,13 +96,15 @@ import fs from "node:fs";
 fs.writeFileSync(
   "public/sw-recovery.html",
   buildRecoveryHtml({
-    appName: "My App",
-    background: "#0b0b0b",
-    accent: "#00c805",
     storagePrefix: "myapp:",
+    bodyHtml: `<div style="display:grid;place-items:center;height:100vh">
+      <p>Updating…</p>
+    </div>`,
   }),
 );
 ```
+
+The recovery page handles the rest: unregisters all SWs, purges Cache Storage, then navigates back to the original URL. Only `bodyHtml` and `storagePrefix` are needed for most projects; `selfPath` and `hardRefreshParam` are advanced overrides.
 
 ## Push-triggered updates
 
@@ -143,16 +145,18 @@ sw.subscribe(render);
 ## React glue example
 
 ```tsx
-import { useSyncExternalStore, useMemo } from "react";
+import { useSyncExternalStore, useState, useEffect } from "react";
 import { createSwStatusController, createInstallController } from "@rpiette/pwa-kit";
 
 export function useSwStatus() {
-  const ctl = useMemo(() => createSwStatusController(), []);
+  const [ctl] = useState(() => createSwStatusController());
+  useEffect(() => () => ctl.destroy(), [ctl]);
   return useSyncExternalStore(ctl.subscribe, ctl.getState, ctl.getState);
 }
 
 export function useInstall() {
-  const ctl = useMemo(() => createInstallController(), []);
+  const [ctl] = useState(() => createInstallController());
+  useEffect(() => () => ctl.destroy(), [ctl]);
   const state = useSyncExternalStore(ctl.subscribe, ctl.getState, ctl.getState);
   return { ...state, prompt: ctl.prompt };
 }
@@ -180,30 +184,33 @@ The endpoint should return JSON with a string id under `functionsBuildId` or `bu
 
 #### `installPwaAutoUpdate(opts)`
 
-Boot once at app startup. All options except `swUrl` are optional.
+Boot once at app startup. All options are optional.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `swUrl` | `string` | — | Path to your service worker |
+| `swUrl` | `string` | `sw.js` (relative to base URL) | Path to your service worker |
 | `versionUrl` | `string` | `"/version.json"` | Polled every ~30 s for a new `buildId` |
-| `buildId` | `string` | — | Current build id (skip check if already up to date) |
-| `storagePrefix` | `string` | `""` | Prefix for `localStorage`/`sessionStorage` keys |
+| `buildId` | `string` | `__APP_BUILD_ID__` (Vite plugin) | Current build id (skip check if already up to date) |
+| `storagePrefix` | `string` | `"pwakit:"` | Prefix for `localStorage`/`sessionStorage` keys |
 | `recoveryUrl` | `string` | `"/sw-recovery.html"` | Shown when a SW update stalls |
 | `onUpdateReady` | `(info: UpdateReadyInfo) => void` | — | Called when an update is ready **and the tab is visible**. Omit to always reload silently. |
 | `snoozeDurationMs` | `number` | `300000` (5 min) | How long to wait before re-prompting after `snooze()` |
 | `onUpdating` | `(newBuildId: string \| null) => void` | — | Called when the new SW starts activating |
+| `shouldSkip` | `() => boolean` | — | Return `true` to skip SW wiring entirely (useful in iframes / preview contexts) |
+| `shouldSuppressUpdates` | `() => boolean` | — | Return `true` to defer applying updates on sensitive routes (e.g. checkout) |
+| `logLabel` | `string` | `"pwakit:sw"` | Console log prefix |
 
 #### `UpdateReadyInfo`
 
 ```ts
 interface UpdateReadyInfo {
-  buildId: string | null;  // incoming build id
-  accept: () => void;      // reload immediately
-  snooze: () => void;      // wait snoozeDurationMs, then re-prompt
+  buildId: string;    // incoming build id
+  accept: () => void; // reload immediately
+  snooze: () => void; // wait snoozeDurationMs, then re-prompt
 }
 ```
 
-`accept()` and `snooze()` are safe to call multiple times — only the first call has effect. If the user switches tabs while the prompt is open, the tab reloads automatically without waiting for a response.
+If the user switches tabs while the prompt is open, the tab reloads automatically without waiting for a response.
 
 #### `forceUpdateProbe()`
 
@@ -230,13 +237,13 @@ These are used internally by `installPwaAutoUpdate` when `onUpdateReady` is set.
 - `subscribeSnooze(fn)`, `getSnooze()` — reactive snooze state.
 
 ### Hard reset
-- `runHardReset(targetBuildId?)` — navigate to the recovery page (clears caches + re-registers SW).
+- `runHardReset(targetBuildId?)` — navigate to the recovery page (unregisters all SWs, clears Cache Storage; SW re-registers on the next page load).
 
 ### Version check
 - `checkAppVersion(opts)` — optional remote handshake.
 
 ### Recovery
-- `buildRecoveryHtml(opts?)` — generate a branded recovery page.
+- `buildRecoveryHtml(opts?)` — generate a recovery page. Options: `bodyHtml` (custom body markup), `storagePrefix`, `selfPath`, `hardRefreshParam`.
 
 ### Scheduling primitives (advanced)
 - `computeNextDelay`, `computeSwProbeDelay`, `getConnectionPenalty`, `canReloadFor`, `canHardRefreshFor`, `buildHardRefreshUrl`, `stripHardRefreshParam`, `buildSwRecoveryUrl`, `createTimerManager`.
