@@ -22,7 +22,7 @@ const config: PwaKitGlobalConfig = {
 };
 
 export function setGlobalConfig(patch: Partial<PwaKitGlobalConfig>): void {
-  if (patch.storagePrefix) config.storagePrefix = patch.storagePrefix;
+  if (patch.storagePrefix != null) config.storagePrefix = patch.storagePrefix;
   if (patch.buildId) config.buildId = patch.buildId;
   if (patch.recoveryUrl) config.recoveryUrl = patch.recoveryUrl;
 }

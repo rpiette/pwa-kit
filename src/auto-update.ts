@@ -153,6 +153,7 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
   let reloading = false;
   let updatePromptPending = false;
   let autoAcceptOnHide: (() => void) | null = null;
+  let snoozeTimer: number | null = null;
   let lastNotifiedBuildId: string | null = null;
   let updateInitiated = false;
 
@@ -192,7 +193,7 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
     const existing = guardStore.read();
     const lastApplied = readLastApplied();
     const isNewlyApplied = lastApplied !== CURRENT_BUILD_ID;
-    if (existing && (existing.buildId === CURRENT_BUILD_ID || isNewlyApplied)) guardStore.clear();
+    if (existing && CURRENT_BUILD_ID !== "----" && (existing.buildId === CURRENT_BUILD_ID || isNewlyApplied)) guardStore.clear();
     if (isNewlyApplied && CURRENT_BUILD_ID && CURRENT_BUILD_ID !== "----") writeLastApplied(CURRENT_BUILD_ID);
   }
 
@@ -288,10 +289,12 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
         const duration = opts.snoozeDurationMs ?? DEFAULT_SNOOZE_MS;
         snoozeFor(duration, target);
         log("update snoozed", { durationMs: duration, target });
-        window.setTimeout(() => {
+        if (snoozeTimer != null) window.clearTimeout(snoozeTimer);
+        snoozeTimer = window.setTimeout(() => {
+          snoozeTimer = null;
           if (reloading) return;
           clearSnooze();
-          triggerReload();
+          triggerReload({ bypassGuard: true });
         }, duration);
       };
 
@@ -299,7 +302,7 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
       autoAcceptOnHide = doReload;
 
       log("update ready — delegating to host (foreground tab)", { source: o?.source ?? "unknown", target });
-      try { opts.onUpdateReady({ buildId: target, accept: doReload, snooze: doSnooze }); } catch { /* noop */ }
+      try { opts.onUpdateReady({ buildId: target, accept: doReload, snooze: doSnooze }); } catch { updatePromptPending = false; autoAcceptOnHide = null; }
       return;
     }
 
@@ -463,6 +466,10 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
             } else if (newWorker.state === "activated") {
               updateInitiated = true;
               onProgressedPastWaiting();
+              // Worker already activated before onState could fire — schedule the reload directly.
+              window.setTimeout(() => {
+                if (!reloading) triggerReload({ bypassGuard: true, source: "activated-fallback" });
+              }, ACTIVATED_RELOAD_DELAY_MS);
             }
           }
         });
@@ -506,6 +513,7 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
 
       // ---- State ----
       let pendingAttempts = 0;
+      let fastRetryScheduled = false;
       let errorAttempts = 0;
       let swProbeErrorAttempts = 0;
       let pendingFirstSeenAt: number | null = null;
@@ -712,7 +720,8 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
             pendingAttempts++;
             void runSwProbe();
             tellWaitingToSkip();
-            if (isFirstDetection) {
+            if (isFirstDetection && !fastRetryScheduled) {
+              fastRetryScheduled = true;
               for (const offset of SW_FAST_RETRY_OFFSETS_MS) {
                 window.setTimeout(() => {
                   if (reloading) return;
@@ -724,6 +733,7 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
             }
           } else {
             pendingAttempts = 0;
+            fastRetryScheduled = false;
           }
         } catch { errorAttempts++; }
         finally {
@@ -846,6 +856,12 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
     broadcastUpdateApplied();
     announceBuildIdToController("controllerchange");
     if (!updateInitiated) return;
+    if (updatePromptPending && autoAcceptOnHide) {
+      // Prompt is open and the new SW just took control — accept immediately rather than blocking.
+      autoAcceptOnHide();
+      autoAcceptOnHide = null;
+      return;
+    }
     triggerReload({ bypassGuard: true, source: "controllerchange" });
   });
 }
