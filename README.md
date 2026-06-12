@@ -13,42 +13,28 @@ npm install @rpiette/pwa-kit
 ## Quick start
 
 ```ts
-import {
-  installPwaAutoUpdate,
-  createInstallController,
-  createSwStatusController,
-  runHardReset,
-  snoozeFor,
-  isSnoozed,
-} from "@rpiette/pwa-kit";
+import { installPwaAutoUpdate } from "@rpiette/pwa-kit";
 
-// 1) Boot the orchestrator once at app startup
 installPwaAutoUpdate({
   swUrl: "/sw.js",
   versionUrl: "/version.json",
-  buildId: __APP_BUILD_ID__,            // injected by the Vite plugin
+  buildId: __APP_BUILD_ID__,          // injected by the Vite plugin (see below)
   storagePrefix: "myapp:",
   recoveryUrl: "/sw-recovery.html",
-  onUpdating: (newBuildId) => {
-    // optional — show your own "Updating to latest version…" toast
+
+  // Foreground tabs: ask before reloading
+  snoozeDurationMs: 5 * 60_000,       // re-prompt after 5 minutes (default)
+  onUpdateReady: ({ accept, snooze }) => {
+    if (confirm("A new version is ready. Reload now?")) {
+      accept();   // reloads immediately
+    } else {
+      snooze();   // waits snoozeDurationMs, then re-prompts
+    }
   },
 });
-
-// 2) Install button
-const install = createInstallController();
-install.subscribe(render);
-// install.getState() → { canInstall, isIos, isInstalled, hasNativePrompt }
-// await install.prompt();
-
-// 3) SW status chip + update button
-const sw = createSwStatusController();
-sw.subscribe(render);
-// sw.getState() → { state, controllingId, newId, hasUpdate }
-
-// 4) Update actions
-await runHardReset(sw.getState().newId || undefined);
-snoozeFor(5 * 60 * 1000, sw.getState().newId);
 ```
+
+**Background tabs reload automatically** — `onUpdateReady` is only called when the tab is visible. If the user switches tabs while the prompt is open, the tab reloads silently.
 
 ## Vite setup
 
@@ -118,6 +104,42 @@ fs.writeFileSync(
 );
 ```
 
+## Push-triggered updates
+
+The auto-update orchestrator polls `/version.json` every ~30 s. For instant delivery, call `forceUpdateProbe()` from whatever push channel your app already has — a WebSocket message, a Server-Sent Event, a Firebase/Supabase listener, a SignalR hub:
+
+```ts
+import { installPwaAutoUpdate, forceUpdateProbe } from "@rpiette/pwa-kit";
+
+installPwaAutoUpdate({ /* ... */ });
+
+// call forceUpdateProbe() whenever your push channel signals a new build
+myPushChannel.on("new-build", () => forceUpdateProbe());
+```
+
+`forceUpdateProbe()` triggers an immediate version-poll + SW probe, so users are notified within seconds of a release rather than up to 30 s later.
+
+## Install prompt
+
+```ts
+import { createInstallController } from "@rpiette/pwa-kit";
+
+const install = createInstallController();
+install.subscribe(render);
+// install.getState() → { canInstall, isIos, isInstalled, hasNativePrompt }
+// await install.prompt();
+```
+
+## SW status
+
+```ts
+import { createSwStatusController } from "@rpiette/pwa-kit";
+
+const sw = createSwStatusController();
+sw.subscribe(render);
+// sw.getState() → { state, controllingId, newId, hasUpdate }
+```
+
 ## React glue example
 
 ```tsx
@@ -155,9 +177,41 @@ The endpoint should return JSON with a string id under `functionsBuildId` or `bu
 ## API reference
 
 ### Auto-update
-- `installPwaAutoUpdate(opts)` — boot once.
-- `forceUpdateProbe()` — trigger an immediate version-poll + SW probe.
-- `isRemoteNewer(remote, current)` — strict numeric comparison.
+
+#### `installPwaAutoUpdate(opts)`
+
+Boot once at app startup. All options except `swUrl` are optional.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `swUrl` | `string` | — | Path to your service worker |
+| `versionUrl` | `string` | `"/version.json"` | Polled every ~30 s for a new `buildId` |
+| `buildId` | `string` | — | Current build id (skip check if already up to date) |
+| `storagePrefix` | `string` | `""` | Prefix for `localStorage`/`sessionStorage` keys |
+| `recoveryUrl` | `string` | `"/sw-recovery.html"` | Shown when a SW update stalls |
+| `onUpdateReady` | `(info: UpdateReadyInfo) => void` | — | Called when an update is ready **and the tab is visible**. Omit to always reload silently. |
+| `snoozeDurationMs` | `number` | `300000` (5 min) | How long to wait before re-prompting after `snooze()` |
+| `onUpdating` | `(newBuildId: string \| null) => void` | — | Called when the new SW starts activating |
+
+#### `UpdateReadyInfo`
+
+```ts
+interface UpdateReadyInfo {
+  buildId: string | null;  // incoming build id
+  accept: () => void;      // reload immediately
+  snooze: () => void;      // wait snoozeDurationMs, then re-prompt
+}
+```
+
+`accept()` and `snooze()` are safe to call multiple times — only the first call has effect. If the user switches tabs while the prompt is open, the tab reloads automatically without waiting for a response.
+
+#### `forceUpdateProbe()`
+
+Trigger an immediate version-poll + SW probe. Use with a push channel for instant update delivery (see above).
+
+#### `isRemoteNewer(remote, current)`
+
+Strict numeric build-id comparison. Returns `true` if `remote` is a higher integer than `current`.
 
 ### Install
 - `createInstallController()` → `{ getState, subscribe, prompt, destroy }`.
@@ -166,11 +220,17 @@ The endpoint should return JSON with a string id under `functionsBuildId` or `bu
 - `createSwStatusController(opts?)` → `{ getState, subscribe, destroy }`.
 - `getCurrentBuildId()`, `getRemoteBuildId()`, `getUpdateStalled()`, `getUpdateRefreshing()`, `getFunctionsBuildNewer()`.
 
-### Update nag
-- `snoozeFor(ms, buildId)`, `clearSnooze()`, `isSnoozed(currentNewBuildId)`, `subscribeSnooze(fn)`, `getSnooze()`.
+### Update nag store
+
+These are used internally by `installPwaAutoUpdate` when `onUpdateReady` is set. Export them if you need to build a custom update UI that reads snooze state.
+
+- `snoozeFor(ms, buildId)` — snooze updates for a given duration.
+- `clearSnooze()` — clear any active snooze.
+- `isSnoozed(buildId)` — returns `true` if the given build id is currently snoozed.
+- `subscribeSnooze(fn)`, `getSnooze()` — reactive snooze state.
 
 ### Hard reset
-- `runHardReset(targetBuildId?)` — navigate to the recovery page.
+- `runHardReset(targetBuildId?)` — navigate to the recovery page (clears caches + re-registers SW).
 
 ### Version check
 - `checkAppVersion(opts)` — optional remote handshake.
