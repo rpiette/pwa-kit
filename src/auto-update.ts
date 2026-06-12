@@ -37,6 +37,7 @@ import {
   setUpdateStalled,
   getCurrentBuildId,
 } from "./sw-status";
+import { snoozeFor, clearSnooze, isSnoozed } from "./nag-store";
 import { runHardReset } from "./hard-reset";
 
 // Injected by the `pwaKit()` vite plugin via `config.define`. Guarded
@@ -47,6 +48,7 @@ declare const __APP_BUILD_ID__: string | undefined;
 const UPDATE_CHANNEL_NAME = "pwakit:update";
 const UPDATE_APPLIED_TYPE = "pwakit:update-applied";
 const ACTIVATED_RELOAD_DELAY_MS = 2_000;
+const DEFAULT_SNOOZE_MS = 5 * 60_000;
 const ONLINE_GRACE_MS = 2_000;
 const BROADCAST_DEBOUNCE_MS = 3_000;
 const SW_PROBE_FAILURE_THRESHOLD = 5;
@@ -55,6 +57,19 @@ const WAKE_THROTTLE_MS = 5_000;
 const STALLED_RECOVERY_THRESHOLD_MS = 20_000;
 const STALLED_RECOVERY_INTERVAL_MS = 30_000;
 const ACTIVATION_WATCHDOG_MS = 4_000;
+
+/** Passed to `onUpdateReady` when a new version is ready and the tab is visible. */
+export interface UpdateReadyInfo {
+  /** The incoming build id. */
+  buildId: string;
+  /** Reload the page now to apply the update. */
+  accept: () => void;
+  /**
+   * Postpone the reload. The host will be called again after
+   * `snoozeDurationMs` (default 5 minutes).
+   */
+  snooze: () => void;
+}
 
 export interface InstallPwaAutoUpdateOptions {
   /** Path to the registered service worker. Default: `${BASE_URL}sw.js`. */
@@ -77,6 +92,18 @@ export interface InstallPwaAutoUpdateOptions {
   shouldSuppressUpdates?: () => boolean;
   /** Called once per pending build id when a real update starts applying. */
   onUpdating?: (buildId: string) => void;
+  /**
+   * Called when a new version is ready and the tab is in the foreground.
+   * Provide this to show a custom prompt instead of reloading silently.
+   * Call `info.accept()` to reload now, or `info.snooze()` to delay.
+   * Background tabs always reload immediately regardless of this option.
+   */
+  onUpdateReady?: (info: UpdateReadyInfo) => void;
+  /**
+   * How long to wait before re-prompting after `snooze()` is called.
+   * Default: 5 minutes.
+   */
+  snoozeDurationMs?: number;
   /** Optional console label. Default: "pwakit:sw". */
   logLabel?: string;
 }
@@ -124,6 +151,8 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
 
   const CURRENT_BUILD_ID = getCurrentBuildId();
   let reloading = false;
+  let updatePromptPending = false;
+  let autoAcceptOnHide: (() => void) | null = null;
   let lastNotifiedBuildId: string | null = null;
   let updateInitiated = false;
 
@@ -230,12 +259,49 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
 
   const triggerReload = (o?: { bypassGuard?: boolean; source?: string }) => {
     if (reloading) return;
+    if (updatePromptPending) return;
     const target = targetBuildIdForGuard();
     if (o?.bypassGuard) {
       try { guardStore.clear(); } catch { /* noop */ }
     } else if (!reloadGuardCheck(target)) {
       return;
     }
+
+    // Foreground tab with onUpdateReady → defer to host for confirmation
+    if (!isBackgroundTab() && opts.onUpdateReady) {
+      if (isSnoozed(target)) return;
+
+      updatePromptPending = true;
+
+      const doReload = () => {
+        updatePromptPending = false;
+        autoAcceptOnHide = null;
+        log("triggering reload", { source: "user-accepted", target });
+        reloading = true;
+        window.location.reload();
+      };
+
+      const doSnooze = () => {
+        updatePromptPending = false;
+        autoAcceptOnHide = null;
+        const duration = opts.snoozeDurationMs ?? DEFAULT_SNOOZE_MS;
+        snoozeFor(duration, target);
+        log("update snoozed", { durationMs: duration, target });
+        window.setTimeout(() => {
+          if (reloading) return;
+          clearSnooze();
+          triggerReload();
+        }, duration);
+      };
+
+      // If the tab becomes hidden while the prompt is open, reload automatically.
+      autoAcceptOnHide = doReload;
+
+      log("update ready — delegating to host (foreground tab)", { source: o?.source ?? "unknown", target });
+      try { opts.onUpdateReady({ buildId: target, accept: doReload, snooze: doSnooze }); } catch { /* noop */ }
+      return;
+    }
+
     log("triggering reload", { source: o?.source ?? "unknown", target });
     reloading = true;
     window.location.reload();
@@ -683,7 +749,11 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
         const next = document.visibilityState;
         if (next === lastVisibilityState) return;
         lastVisibilityState = next;
-        if (next !== "visible") { scheduleNextPoll(); scheduleSwProbe({ force: true }); return; }
+        if (next !== "visible") {
+          // If a prompt was open when the user switched away, reload immediately.
+          if (autoAcceptOnHide) { autoAcceptOnHide(); autoAcceptOnHide = null; }
+          scheduleNextPoll(); scheduleSwProbe({ force: true }); return;
+        }
         scheduleSwProbe({ force: true });
         if (isOffline()) { scheduleNextPoll(); return; }
         void runSwProbe();

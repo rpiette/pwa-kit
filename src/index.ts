@@ -11,6 +11,7 @@ export {
   forceUpdateProbe,
   isRemoteNewer,
   type InstallPwaAutoUpdateOptions,
+  type UpdateReadyInfo,
 } from "./auto-update";
 
 export {
