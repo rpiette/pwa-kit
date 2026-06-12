@@ -268,7 +268,8 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
     }
 
     // Foreground tab with onUpdateReady → defer to host for confirmation
-    if (!isBackgroundTab() && opts.onUpdateReady) {
+    const isForegroundTab = (): boolean => { try { return typeof document === "undefined" || document.visibilityState !== "hidden"; } catch { return true; } };
+    if (isForegroundTab() && opts.onUpdateReady) {
       if (isSnoozed(target)) return;
 
       updatePromptPending = true;
