@@ -53,7 +53,10 @@ export interface PwaKitVitePluginOptions {
 }
 
 export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
-  const BUILD_ID = opts.buildId ?? Date.now().toString();
+  // Mutable so the config() hook can stabilise it to "dev" in serve mode
+  // before any other hook reads it — prevents build-id churn between dev
+  // server restarts from triggering the rescue/update flow.
+  let BUILD_ID = opts.buildId ?? Date.now().toString();
   const swHelperPath = opts.swHelperPath ?? "public/sw-push.js";
   const publicDirOption = opts.publicDir ?? "public";
   const logLabel = opts.logLabel ?? "pwakit";
@@ -78,7 +81,13 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
 
   const define: Plugin = {
     name: "pwakit:define",
-    config() {
+    config(_config, { command }) {
+      if (command === "serve" && opts.buildId == null) {
+        // Stable sentinel so the app's __APP_BUILD_ID__ never changes between
+        // dev server restarts — prevents the SW from seeing a version mismatch
+        // and triggering the rescue redirect on every restart.
+        BUILD_ID = "dev";
+      }
       return {
         define: {
           __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
