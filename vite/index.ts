@@ -105,6 +105,15 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
   const emitVersion: Plugin = {
     name: "pwakit:emit-version-json",
     apply: "build",
+    configResolved(cfg) {
+      // configResolved fires even when apply:"build" skips the other hooks,
+      // so this is the right place to write the dev stub. By the time this
+      // runs, define.config() has already set BUILD_ID = "dev" and
+      // define.configResolved() has set resolvedRoot.
+      if (cfg.command === "serve") {
+        writeVersion(path.resolve(resolvedRoot, publicDirOption), new Date().toISOString());
+      }
+    },
     buildStart() {
       writeVersion(path.resolve(resolvedRoot, publicDirOption), new Date().toISOString());
     },

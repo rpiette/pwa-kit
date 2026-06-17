@@ -1,8 +1,8 @@
 # @rpiette/pwa-kit
 
-Framework-agnostic, **headless** PWA management toolkit. The host renders every pixel; this package owns the brains: install-prompt capture, service-worker lifecycle, update nag/snooze, hard reset, and the auto-update orchestrator.
+Stop wrestling with your service worker - framework-agnostic, **headless** PWA management toolkit. The host renders every pixel; this package owns the brains: install-prompt capture, service-worker lifecycle, update nag/snooze, hard reset, and the auto-update orchestrator.
 
-Zero runtime dependencies. ESM + CJS + `.d.ts`. Works with React, Vue, Svelte, vanilla JS — anything that can call a function and read a value.
+Zero runtime dependencies. ESM + CJS + `.d.ts`. Works with React, Vue, Svelte, vanilla JS - anything that can call a function and read a value.
 
 ## Install
 
