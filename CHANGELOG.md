@@ -5,6 +5,95 @@ All notable changes to `@rpiette/pwa-kit` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] - 2026-06-17
+
+### Changed
+
+- Backfilled CHANGELOG entries for 0.1.8–0.1.17 from git history.
+
+## [0.1.19] - 2026-06-17
+
+### Added
+
+- `repository` field in `package.json` linking to the GitHub repository so the npm package page shows a source link.
+
+## [0.1.18] - 2026-06-17
+
+### Fixed
+
+- `pwaKit()` now writes `public/version.json` at dev server start, not only during build. Previously, when no production build output existed (e.g. after clearing the build directory), the service worker's `/version.json` fetch fell through to the Vite proxy and failed with a network error. The dev stub uses the stable `"dev"` build id so the SW never sees a version mismatch between restarts.
+
+### Changed
+
+- README: updated Vite plugin description to document that `public/version.json` is emitted in both dev and build modes, and that the SW helper rewrite also happens at dev server start.
+
+## [0.1.17] - 2026-06-16
+
+### Changed
+
+- No recorded source changes — internal republish after 0.1.16 validation.
+
+## [0.1.16] - 2026-06-16
+
+### Fixed
+
+- `pwaKit()` now stabilizes `BUILD_ID` to the sentinel `"dev"` when Vite is in serve mode (and no explicit `buildId` option is passed). Previously a fresh timestamp was used on every dev-server start, causing `__APP_BUILD_ID__` to change on each restart and the auto-update orchestrator to see a version mismatch — triggering the rescue-redirect flow continuously during development.
+
+## [0.1.15] - 2026-06-11
+
+### Changed
+
+- README updated to document `onUpdateReady`, `snoozeDurationMs`, and the full `installPwaAutoUpdate` options table.
+
+## [0.1.14] - 2026-06-11
+
+### Fixed
+
+- Replaced single snooze `setTimeout` with a tracked reference so re-triggering clears the previous timer and prevents duplicate reload calls after snooze expiry.
+- `onUpdateReady` errors no longer leave `updatePromptPending` and `autoAcceptOnHide` stuck — both are reset in the catch path.
+- Added an `activated-fallback` path that schedules a reload when a new worker has already reached the `"activated"` state before the `statechange` listener fires.
+- Guard store is no longer cleared when `__APP_BUILD_ID__` is the default `"----"` sentinel (unset build id), preventing false "already up to date" decisions on unbuilt dev bundles.
+
+## [0.1.13] - 2026-06-11
+
+### Changed
+
+- Updated dependencies to resolve reported security vulnerabilities.
+- README updated with latest API surface.
+
+## [0.1.12] - 2026-06-11
+
+### Added
+
+- `onUpdateReady` option on `installPwaAutoUpdate()`. When provided, foreground tabs call this callback with `{ buildId, accept, snooze }` instead of reloading silently, letting the host display a custom prompt. Background tabs continue to reload automatically.
+- `snoozeDurationMs` option (default 5 minutes) controls how long to wait before re-prompting after `snooze()` is called.
+- `UpdateReadyInfo` interface exported for host TypeScript consumers.
+
+## [0.1.11] - 2026-06-11
+
+### Changed
+
+- `pwaKit()` Vite plugin now auto-generates `public/sw-push.js` at `configResolved` time (both build and serve). Consumers no longer need to manually copy the file from `node_modules`.
+
+## [0.1.10] - 2026-06-11
+
+### Fixed
+
+- `pwaKit()` was not emitting `sw-recovery.html` at build time. Added the `recoveryHtml` plugin option (`{ path, bodyHtml, storagePrefix, ... }`) which generates the file during `configResolved` so it is always present in `public/` for both dev and build.
+
+## [0.1.9] - 2026-06-11
+
+### Fixed
+
+- Recovery page no longer enters an infinite reload loop when the returning URL already contains the hard-refresh query parameter.
+- Recovery page HTML and script are now generated programmatically at build time via `buildRecoveryHtml()` rather than being checked in as a static asset, ensuring the recovery logic is always in sync with the installed package version.
+
+## [0.1.8] - 2026-06-11
+
+### Changed
+
+- Published source to GitHub. No functional changes from 0.1.7.
+
 ## [0.1.7] - 2026-06-11
 
 ### Fixed
