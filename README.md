@@ -53,8 +53,8 @@ export default defineConfig({
 
 The plugin:
 1. Defines `__APP_BUILD_ID__` as a global string constant.
-2. Emits `/version.json` (`{ buildId, builtAt }`) to `public/` and your `outDir`.
-3. Replaces the literal `__SW_BUILD_ID_PLACEHOLDER__` in your SW helper at build time.
+2. Emits `public/version.json` (`{ buildId, builtAt }`) at **both** dev server start and build time. In dev mode the `buildId` is the stable sentinel `"dev"` so the SW never sees a version mismatch between restarts. At build time it also copies to your `outDir`.
+3. Rewrites the `__SW_BUILD_ID_PLACEHOLDER__` literal in your SW helper at dev server start and build time.
 
 Add a global type once:
 
