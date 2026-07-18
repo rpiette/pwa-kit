@@ -44,6 +44,9 @@ import { runHardReset } from "./hard-reset";
 // at call sites with `typeof` so the package remains importable in
 // environments that do not run through the plugin (tests, SSR probes).
 declare const __APP_BUILD_ID__: string | undefined;
+// Injected by the `pwaKit()` vite plugin — `true` under `vite serve` (dev).
+// Guarded with `typeof` so the package stays importable without the plugin.
+declare const __PWAKIT_DEV__: boolean | undefined;
 
 const UPDATE_CHANNEL_NAME = "pwakit:update";
 const UPDATE_APPLIED_TYPE = "pwakit:update-applied";
@@ -84,6 +87,13 @@ export interface InstallPwaAutoUpdateOptions {
   recoveryUrl?: string;
   /** Skip wiring entirely when true. Use for preview/iframe contexts. */
   shouldSkip?: () => boolean;
+  /**
+   * Register the service worker even under `vite serve` (dev). Off by default:
+   * a SW in dev fights HMR/caching, and its generated helper may not exist yet.
+   * Requires the `pwaKit()` vite plugin to inject the dev signal; without the
+   * plugin, registration proceeds as normal regardless of this option.
+   */
+  registerInDev?: boolean;
   /**
    * Optional gate — when it returns true, the "Updating to latest…"
    * side effects (toast hook, SKIP_WAITING) are suppressed. Lets hosts
@@ -127,6 +137,19 @@ export function forceUpdateProbe(): void {
 export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): void {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   if (opts.shouldSkip?.()) return;
+
+  // Under `vite serve` (dev), skip registration by default — a SW fights
+  // HMR/caching and its generated helper may be absent. Opt in with
+  // `registerInDev`. Best-effort clean up any worker left over from a prior
+  // build/dev run so it can't keep intercepting requests.
+  const inDev = typeof __PWAKIT_DEV__ !== "undefined" && __PWAKIT_DEV__ === true;
+  if (inDev && opts.registerInDev !== true) {
+    void navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => regs.forEach((r) => void r.unregister()))
+      .catch(() => {});
+    return;
+  }
 
   // Resolve the build id from (in order): caller-provided opts → the
   // compile-time constant defined by `pwaKit()` → undefined. Without

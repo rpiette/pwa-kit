@@ -5,6 +5,20 @@ All notable changes to `@rpiette/pwa-kit` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-18
+
+### Fixed
+
+- `pwaKit()` now actually writes `public/sw-push.js` and `public/version.json` at dev server start. The `emitVersion` and `injectSw` plugins were marked `apply: "build"`, which Vite drops entirely in serve mode, so their `configResolved` hooks never ran in dev — the 0.1.18 dev-`version.json` fix was silently ineffective, and `public/sw-push.js` was never generated for the dev server (it only lingered from a prior build, 404ing after a clean/fresh clone and breaking the service worker's `importScripts`). The `public/` writes now run in both serve and build; the build-output (`dist/`) writes remain build-only.
+
+### Added
+
+- `installPwaAutoUpdate` now skips service-worker registration under `vite serve` (dev) by default, and best-effort unregisters any leftover worker (a SW in dev fights HMR/caching and its generated helper may be absent). Opt back in with the new `registerInDev: true` option. Requires the `pwaKit()` plugin, which injects a `__PWAKIT_DEV__` compile-time flag; without the plugin, registration proceeds as before.
+
+### Changed
+
+- Default dev behavior: PWA/service-worker registration is now off under `vite serve` unless `registerInDev` is set. Deployed builds (`vite build`) are unaffected.
+
 ## [0.1.20] - 2026-06-17
 
 ### Changed

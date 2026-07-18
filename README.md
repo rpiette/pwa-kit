@@ -197,8 +197,11 @@ Boot once at app startup. All options are optional.
 | `snoozeDurationMs` | `number` | `300000` (5 min) | How long to wait before re-prompting after `snooze()` |
 | `onUpdating` | `(newBuildId: string \| null) => void` | — | Called when the new SW starts activating |
 | `shouldSkip` | `() => boolean` | — | Return `true` to skip SW wiring entirely (useful in iframes / preview contexts) |
+| `registerInDev` | `boolean` | `false` | Register the SW under `vite serve` (dev). Off by default — a SW in dev fights HMR/caching; set `true` to test the SW locally |
 | `shouldSuppressUpdates` | `() => boolean` | — | Return `true` to defer applying updates on sensitive routes (e.g. checkout) |
 | `logLabel` | `string` | `"pwakit:sw"` | Console log prefix |
+
+> **Dev note:** By default `installPwaAutoUpdate` **skips registration under `vite serve`** (and unregisters any leftover worker), since a service worker in dev interferes with HMR and caching. Set `registerInDev: true` to opt in. This requires the `pwaKit()` plugin (it injects the dev signal); without the plugin, registration always proceeds. Deployed builds (`vite build`) are unaffected.
 
 #### `UpdateReadyInfo`
 

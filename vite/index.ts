@@ -62,6 +62,7 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
   const logLabel = opts.logLabel ?? "pwakit";
   let resolvedRoot = process.cwd();
   let resolvedOutDir = opts.outDir ?? "dist";
+  let isBuild = false;
 
   const writeVersion = (dir: string, builtAt: string) => {
     const payload = JSON.stringify({ buildId: BUILD_ID, builtAt });
@@ -91,10 +92,14 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
       return {
         define: {
           __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
+          // Lets `installPwaAutoUpdate` skip SW registration under `vite serve`
+          // by default (a SW in dev fights HMR/caching).
+          __PWAKIT_DEV__: JSON.stringify(command === "serve"),
         },
       };
     },
     configResolved(cfg) {
+      isBuild = cfg.command === "build";
       resolvedRoot = cfg.root;
       resolvedOutDir = path.isAbsolute(cfg.build.outDir)
         ? cfg.build.outDir
@@ -104,20 +109,19 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
 
   const emitVersion: Plugin = {
     name: "pwakit:emit-version-json",
-    apply: "build",
-    configResolved(cfg) {
-      // configResolved fires even when apply:"build" skips the other hooks,
-      // so this is the right place to write the dev stub. By the time this
-      // runs, define.config() has already set BUILD_ID = "dev" and
-      // define.configResolved() has set resolvedRoot.
-      if (cfg.command === "serve") {
-        writeVersion(path.resolve(resolvedRoot, publicDirOption), new Date().toISOString());
-      }
-    },
-    buildStart() {
-      writeVersion(path.resolve(resolvedRoot, publicDirOption), new Date().toISOString());
+    configResolved() {
+      // Emit version.json into public/ up front so the dev server serves it and
+      // any pre-build tooling can pick it up. Runs in serve AND build — this was
+      // previously gated behind apply:"build", so it never ran for the dev
+      // server (Vite drops apply:"build" plugins entirely in serve).
+      writeVersion(
+        path.resolve(resolvedRoot, publicDirOption),
+        new Date().toISOString(),
+      );
     },
     closeBundle() {
+      // On a real build, also emit into the output dir with a final timestamp.
+      if (!isBuild) return;
       const at = new Date().toISOString();
       writeVersion(path.resolve(resolvedRoot, publicDirOption), at);
       writeVersion(resolvedOutDir, at);
@@ -138,14 +142,17 @@ export function pwaKit(opts: PwaKitVitePluginOptions = {}): Plugin[] {
 
   const injectSw: Plugin = {
     name: "pwakit:inject-sw-build-id",
+    enforce: "post",
     configResolved() {
-      // Write to public/ so the dev server serves the correct file.
+      // Write the build-id-injected SW helper into public/ so the dev server
+      // serves it. Runs in serve AND build — this was previously gated behind
+      // apply:"build", so it never ran for the dev server and public/sw-push.js
+      // was left missing (404) unless a prior build happened to leave it behind.
       writeSw(path.resolve(resolvedRoot, swHelperPath));
     },
-    apply: "build",
-    enforce: "post",
     closeBundle() {
-      // Also write to the build output directory.
+      // On a real build, also write to the output directory.
+      if (!isBuild) return;
       writeSw(path.join(resolvedOutDir, path.basename(swHelperPath)));
     },
   };
