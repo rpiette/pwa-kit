@@ -5,6 +5,12 @@ All notable changes to `@rpiette/pwa-kit` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-31
+
+### Fixed
+
+- "Remind me later" is now actually honored. Two paths could reload the page even after the user declined the update prompt: (1) the `controllerchange` handler force-accepted an open prompt ("accept immediately rather than blocking") — since `SKIP_WAITING` is posted at install time, the new worker's activation raced the prompt and reloaded from under the user's click; it now leaves the open prompt alone (the reload happens on accept or after the snooze expires). (2) The no-prompt reload path (background tab, `activated-fallback`, `controllerchange`) ignored an active snooze; for prompt-based hosts it now skips the reload while a snooze is active. The snooze-expiry timer clears the snooze before re-triggering, so deferred updates still land.
+
 ## [0.2.0] - 2026-07-18
 
 ### Fixed

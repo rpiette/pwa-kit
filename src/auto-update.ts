@@ -329,6 +329,15 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
       return;
     }
 
+    // Prompt-based hosts: an active snooze is an explicit user decision — honor it on
+    // the no-prompt paths too (background tab, activated-fallback, controllerchange),
+    // so a deferred update can't reload the page through a side door. The snooze-expiry
+    // timer clears the snooze before re-triggering, so updates still land.
+    if (opts.onUpdateReady && isSnoozed(target)) {
+      log("skipping reload — update snoozed by user", { source: o?.source ?? "unknown", target });
+      return;
+    }
+
     log("triggering reload", { source: o?.source ?? "unknown", target });
     reloading = true;
     window.location.reload();
@@ -784,8 +793,9 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
         if (next === lastVisibilityState) return;
         lastVisibilityState = next;
         if (next !== "visible") {
-          // If a prompt was open when the user switched away, reload immediately.
-          if (autoAcceptOnHide) { autoAcceptOnHide(); autoAcceptOnHide = null; }
+          // An open prompt stays open — no reload happens without the user's answer
+          // (updatePromptPending blocks every triggerReload path), so switching away
+          // can never discard in-progress work.
           scheduleNextPoll(); scheduleSwProbe({ force: true }); return;
         }
         scheduleSwProbe({ force: true });
@@ -879,10 +889,11 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
     broadcastUpdateApplied();
     announceBuildIdToController("controllerchange");
     if (!updateInitiated) return;
-    if (updatePromptPending && autoAcceptOnHide) {
-      // Prompt is open and the new SW just took control — accept immediately rather than blocking.
-      autoAcceptOnHide();
-      autoAcceptOnHide = null;
+    if (updatePromptPending) {
+      // A prompt is open — the decision belongs to the user. The new worker already
+      // controls the page either way; the reload happens on accept (or after the
+      // snooze expires). Force-accepting here raced the user's "remind me later"
+      // click and reloaded from under them, losing in-progress work.
       return;
     }
     triggerReload({ bypassGuard: true, source: "controllerchange" });
