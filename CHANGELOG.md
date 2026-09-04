@@ -5,6 +5,12 @@ All notable changes to `@rpiette/pwa-kit` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-09-04
+
+### Fixed
+
+- The install button now actually appears on iOS. The store initialized with a hardcoded `canInstall: false` and recomputed only from `beforeinstallprompt` / `appinstalled` / `getInstalledRelatedApps` — none of which exist on iOS — so the iOS branch of the compute was unreachable and an iPhone browser kept the initial `false` for the page's entire lifetime (0.2.2's stale-flag fix was necessary but could never be reached). The initial state is now computed: `canInstall = !installed && isIos` at controller creation, with `hasNativePrompt` genuinely false at that point since the event listener attaches in the same synchronous module load. Verified behaviorally against the built bundle: iPhone-browser (offered), iPhone-standalone (installed, not offered), iPhone-with-stale-flag (offered), Android-pre-prompt (not offered until the native event) — and 0.2.2 reproduces the missing button under the same simulation.
+
 ## [0.2.2] - 2026-09-04
 
 ### Fixed

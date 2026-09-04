@@ -83,11 +83,18 @@ export function createInstallController(): InstallController {
   // construction — and iOS offers the browser no installed-state detection at all,
   // which means an iOS browser context must always keep offering the install
   // instructions. Standalone detection is the only iOS truth.
+  const isIos = detectIos();
   const initialInstalled =
-    detectStandalone() || (!detectIos() && readPersistedInstalled());
+    detectStandalone() || (!isIos && readPersistedInstalled());
   const store = createStore<InstallState>({
-    canInstall: false,
-    isIos: detectIos(),
+    // Computed, never hardcoded false: on iOS NOTHING recomputes this state later —
+    // beforeinstallprompt and appinstalled never fire and getInstalledRelatedApps does
+    // not exist — so whatever the store starts with is what an iOS browser shows for
+    // the page's entire lifetime. (hasNativePrompt is genuinely false at init: the
+    // listener attaches in this same synchronous module load, before the event loop
+    // could deliver a beforeinstallprompt.)
+    canInstall: !initialInstalled && isIos,
+    isIos,
     isInstalled: initialInstalled,
     hasNativePrompt: false,
   });
