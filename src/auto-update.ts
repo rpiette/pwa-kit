@@ -175,7 +175,6 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
   const CURRENT_BUILD_ID = getCurrentBuildId();
   let reloading = false;
   let updatePromptPending = false;
-  let autoAcceptOnHide: (() => void) | null = null;
   let snoozeTimer: number | null = null;
   let lastNotifiedBuildId: string | null = null;
   let updateInitiated = false;
@@ -300,7 +299,6 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
 
       const doReload = () => {
         updatePromptPending = false;
-        autoAcceptOnHide = null;
         log("triggering reload", { source: "user-accepted", target });
         reloading = true;
         window.location.reload();
@@ -308,7 +306,6 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
 
       const doSnooze = () => {
         updatePromptPending = false;
-        autoAcceptOnHide = null;
         const duration = opts.snoozeDurationMs ?? DEFAULT_SNOOZE_MS;
         snoozeFor(duration, target);
         log("update snoozed", { durationMs: duration, target });
@@ -321,11 +318,8 @@ export function installPwaAutoUpdate(opts: InstallPwaAutoUpdateOptions = {}): vo
         }, duration);
       };
 
-      // If the tab becomes hidden while the prompt is open, reload automatically.
-      autoAcceptOnHide = doReload;
-
       log("update ready — delegating to host (foreground tab)", { source: o?.source ?? "unknown", target });
-      try { opts.onUpdateReady({ buildId: target, accept: doReload, snooze: doSnooze }); } catch { updatePromptPending = false; autoAcceptOnHide = null; }
+      try { opts.onUpdateReady({ buildId: target, accept: doReload, snooze: doSnooze }); } catch { updatePromptPending = false; }
       return;
     }
 

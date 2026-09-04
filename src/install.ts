@@ -78,7 +78,13 @@ function detectStandalone(): boolean {
 
 export function createInstallController(): InstallController {
   let deferredPrompt: BeforeInstallPromptEvent | null = null;
-  const initialInstalled = detectStandalone() || readPersistedInstalled();
+  // The persisted flag is never trusted on iOS: Safari and an installed PWA have
+  // SEPARATE storage there, so a flag readable from the browser is stale by
+  // construction — and iOS offers the browser no installed-state detection at all,
+  // which means an iOS browser context must always keep offering the install
+  // instructions. Standalone detection is the only iOS truth.
+  const initialInstalled =
+    detectStandalone() || (!detectIos() && readPersistedInstalled());
   const store = createStore<InstallState>({
     canInstall: false,
     isIos: detectIos(),
